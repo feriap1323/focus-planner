@@ -1,0 +1,143 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Focus Planner</title>
+<style>
+:root{--bg:#f3f6fc;--card:#fff;--ink:#0f2347;--mute:#5d6b86;--line:#d9e1f0;--acc:#2f6bff;--acc2:#0f2347;--ok:#12a36b;--warn:#e8890c;--hi:#d6314d;
+box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){--bg:#0b1429;--card:#121d38;--ink:#e8eefc;--mute:#93a1c2;--line:#25335a;--acc:#6b95ff;--acc2:#6b95ff}}
+:root[data-theme="dark"]{--bg:#0b1429;--card:#121d38;--ink:#e8eefc;--mute:#93a1c2;--line:#25335a;--acc:#6b95ff;--acc2:#6b95ff}
+*{box-sizing:border-box}
+html{scroll-padding-top:env(safe-area-inset-top,0px)}
+body{margin:0;background:var(--bg);color:var(--ink);font:16px/1.5 "Segoe UI",system-ui,sans-serif}
+main{max-width:860px;margin:0 auto;padding:24px 16px 48px}
+.topbar{display:flex;justify-content:space-between;align-items:flex-start;margin:0 0 4px}
+h1{font:700 2rem/1.15 Georgia,"Times New Roman",serif;margin:0}
+#theme-btn{padding:6px 12px;font-size:.85rem;border-radius:8px;cursor:pointer;border:1px solid var(--line);background:var(--card);color:var(--ink);white-space:nowrap}
+.sub{color:var(--mute);margin:0 0 24px}
+.grid{display:grid;grid-template-columns:1fr 1fr;gap:16px}
+@media(max-width:700px){.grid{grid-template-columns:1fr}}
+.card{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:18px}
+h2{font-size:1.05rem;margin:0 0 12px}
+.timer{font:700 3.4rem/1 Georgia,serif;text-align:center;margin:8px 0 14px;font-variant-numeric:tabular-nums}
+.row{display:flex;gap:8px;flex-wrap:wrap}
+.row.c{justify-content:center}
+button,input,select{font:inherit;color:var(--ink)}
+button{border:1px solid var(--line);background:var(--card);padding:8px 14px;border-radius:8px;cursor:pointer}
+button.p{background:var(--acc);border-color:var(--acc);color:#fff}
+button:focus-visible,input:focus-visible,select:focus-visible{outline:3px solid var(--acc);outline-offset:2px}
+input,select{border:1px solid var(--line);background:var(--bg);border-radius:8px;padding:8px 10px}
+input[type=text]{flex:1;min-width:140px}
+.bar{height:10px;background:var(--line);border-radius:6px;overflow:hidden;margin:6px 0 4px}
+.bar i{display:block;height:100%;width:0;background:var(--ok);transition:width .3s}
+ul{list-style:none;margin:14px 0 0;padding:0}
+li{display:flex;align-items:center;gap:10px;padding:10px 0;border-top:1px solid var(--line)}
+li span.t{flex:1;overflow-wrap:anywhere}
+li.done span.t{text-decoration:line-through;color:var(--mute)}
+.tag{font-size:.78rem;padding:2px 8px;border-radius:99px;border:1px solid currentColor}
+.High{color:var(--hi)}.Medium{color:var(--warn)}.Low{color:var(--ok)}
+.x{padding:2px 8px;color:var(--mute)}
+.empty{color:var(--mute);padding:10px 0}
+.stat{color:var(--mute);font-size:.9rem}
+</style>
+<style>@media (prefers-reduced-motion:reduce){.bar i{transition:none}}</style>
+</head>
+<body>
+<main>
+  <div class="topbar">
+    <h1>Focus Planner</h1>
+    <button id="theme-btn" aria-label="Toggle dark mode">Dark</button>
+  </div>
+  <p class="sub">Plan your study tasks, then work through them in 25-minute focus sessions.</p>
+  <div class="grid">
+    <section class="card" aria-labelledby="th">
+      <h2 id="th">Focus session</h2>
+      <div class="timer" id="clock" role="timer" aria-live="off">25:00</div>
+      <div class="row c">
+        <button class="p" id="go">Start</button>
+        <button id="reset">Reset</button>
+        <select id="len" aria-label="Session length">
+          <option value="15">15 min</option><option value="25" selected>25 min</option><option value="45">45 min</option>
+        </select>
+      </div>
+      <p class="stat" style="text-align:center;margin:14px 0 0">Sessions finished today: <b id="count">0</b></p>
+    </section>
+    <section class="card" aria-labelledby="ph">
+      <h2 id="ph">Today's progress</h2>
+      <div class="bar"><i id="fill"></i></div>
+      <div class="stat" id="prog">No tasks yet</div>
+      <form id="f" class="row" style="margin-top:16px" onsubmit="return false">
+        <input type="text" id="txt" placeholder="Add a task, e.g. Read chapter 4" aria-label="Task name" maxlength="80">
+        <select id="pri" aria-label="Priority"><option>High</option><option selected>Medium</option><option>Low</option></select>
+        <button class="p" id="add" type="button">Add task</button>
+      </form>
+    </section>
+  </div>
+  <section class="card" style="margin-top:16px" aria-labelledby="lh">
+    <h2 id="lh">Tasks</h2>
+    <div class="row"><button id="clr">Clear completed</button></div>
+    <ul id="list"></ul>
+  </section>
+</main>
+<script>
+(function(){
+  var tasks=[],sessions=0,KEY="focus-planner-v1";
+  function load(){try{var d=JSON.parse(localStorage.getItem(KEY)||"null");if(d){tasks=d.tasks||[];if(d.day===new Date().toDateString())sessions=d.sessions||0}}catch(e){}}
+  function save(){try{localStorage.setItem(KEY,JSON.stringify({tasks:tasks,sessions:sessions,day:new Date().toDateString()}))}catch(e){}}
+  var $=function(i){return document.getElementById(i)};
+  function render(){
+    var ul=$("list");ul.innerHTML="";
+    if(!tasks.length){ul.innerHTML='<li class="empty">Nothing planned. Add your first task above.</li>'}
+    tasks.forEach(function(t,i){
+      var li=document.createElement("li");if(t.done)li.className="done";
+      var cb=document.createElement("input");cb.type="checkbox";cb.checked=t.done;cb.setAttribute("aria-label","Mark done: "+t.text);
+      cb.onchange=function(){t.done=cb.checked;save();render()};
+      var s=document.createElement("span");s.className="t";s.textContent=t.text;
+      var g=document.createElement("span");g.className="tag "+t.pri;g.textContent=t.pri;
+      var x=document.createElement("button");x.className="x";x.textContent="Delete";x.setAttribute("aria-label","Delete "+t.text);
+      x.onclick=function(){tasks.splice(i,1);save();render()};
+      li.append(cb,s,g,x);ul.appendChild(li);
+    });
+    var d=tasks.filter(function(t){return t.done}).length,n=tasks.length;
+    $("fill").style.width=(n?d/n*100:0)+"%";
+    $("prog").textContent=n?d+" of "+n+" tasks done":"No tasks yet";
+    $("count").textContent=sessions;
+  }
+  function add(){var v=$("txt").value.trim();if(!v)return;tasks.push({text:v,pri:$("pri").value,done:false});$("txt").value="";save();render();$("txt").focus()}
+  $("add").onclick=add;
+  $("txt").addEventListener("keydown",function(e){if(e.key==="Enter")add()});
+  $("clr").onclick=function(){tasks=tasks.filter(function(t){return !t.done});save();render()};
+  var left=25*60,iv=null;
+  function show(){var m=Math.floor(left/60),s=left%60;$("clock").textContent=(m<10?"0":"")+m+":"+(s<10?"0":"")+s;document.title=(iv?$("clock").textContent+" · ":"")+"Focus Planner"}
+  function stop(){clearInterval(iv);iv=null;$("go").textContent="Start";show()}
+  $("go").onclick=function(){
+    if(iv){stop();return}
+    $("go").textContent="Pause";
+    iv=setInterval(function(){left--;if(left<=0){left=0;sessions++;save();render();stop();$("clock").textContent="Done";return}show()},1000);
+  };
+  $("reset").onclick=function(){stop();left=+$("len").value*60;show()};
+  $("len").onchange=function(){if(!iv){left=+$("len").value*60;show()}};
+  load();render();show();
+  (function(){
+    var btn=document.getElementById("theme-btn");
+    var root=document.documentElement;
+    function applyTheme(t){
+      if(t==="dark"){root.setAttribute("data-theme","dark");btn.textContent="Light"}
+      else{root.setAttribute("data-theme","light");btn.textContent="Dark"}
+    }
+    var stored=localStorage.getItem("focus-planner-theme");
+    if(stored){applyTheme(stored)}
+    else if(window.matchMedia&&window.matchMedia("(prefers-color-scheme:dark)").matches){applyTheme("dark")}
+    btn.addEventListener("click",function(){
+      var isDark=root.getAttribute("data-theme")==="dark";
+      var next=isDark?"light":"dark";
+      applyTheme(next);
+      try{localStorage.setItem("focus-planner-theme",next)}catch(e){}
+    });
+  })();
+})();
+</script>
+</body>
+</html>
